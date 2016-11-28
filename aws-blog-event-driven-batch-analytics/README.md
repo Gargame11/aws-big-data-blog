@@ -37,37 +37,45 @@ Multiple transaction categories indicating whether credit card or cash has been 
   2. Create a NAT Gateway or NAT Instance for [lambda functions in private subnet](https://aws.amazon.com/blogs/aws/new-access-resources-in-a-vpc-from-your-lambda-functions/) to be able to access internet
   3. Create a role "myLambdaRole" with AWSLambdaVPCAccessExecution, AWSLambdaRole, ElasticMapReduceForEC2Role,S3 and CloudWatch access policies
   4. Create security group "MySecurityGroup" with inbound MySQL (3306) and Redshift (5439) ports open.
-2. Download MySQL JDBC driver (5.1.38 or later) and Redshift JDBC Driver (1.1.13 or later) and [add](https://maven.apache.org/guides/mini/guide-3rd-party-jars-local.html) those to your maven repository
+2. [Maven](http://maven.apache.org/install.html) configured correctly with [Shade](https://maven.apache.org/plugins/maven-shade-plugin/), and optionally your favorite Java IDE.
+3. Download MySQL JDBC driver (5.1.38 or later) and Redshift JDBC Driver (1.1.13 or later) and [add](https://maven.apache.org/guides/mini/guide-3rd-party-jars-local.html) those to your maven repository
 
 ### Getting Started
+
+#### Input Validation / Conversion Layer
+
+Let's begin by establishing a successful first Input Validation / Conversion layer.  The pieces we need are a uniquely named (per the account) S3 bucket, and our first Lambda function with sufficient permissions, also uniquely named per the account, and region.
 
 1. Create S3 bucket. This is the bucket where you would maintain data and configurations for testing the sample implementation provided here
 
  ```
-  aws s3 mb <<S3_EDBA_BUCKET>>
-  ```
-2. Create  [Amazon RDS Mysql 5.7.x instance](http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_GettingStarted.CreatingConnecting.MySQL.html)
-3. Update [lambda function properties](src/main/resources/edba_lambda_config.properties) with your MySQL endpoint, username and password
-4. Create EMR cluster with tag "edba=true". When submitting aggregation jobs to the cluster the "Aggregation Job Submission” layer lambda function will look for the active clusters that have this tag. If you wish to use to a different tag, update [lambda function properties](src/main/resources/edba_lambda_config.properties) to reflect the same. If you plan to use an existing cluster with similar configuration below, just [add the tag](http://docs.aws.amazon.com/ElasticMapReduce/latest/DeveloperGuide/emr-plan-tags-add.html) "edba=true"
+  aws s3 mb <<S3_EDBA_ACCT_UNIQ_BCKT>>
+ ```
 
-  ```
-    aws emr create-cluster --name “MY_EDBA_CLUSTER" --release-label emr-5.0.0 --use-default-roles --ec2-attributes KeyName=my-key --applications Name=Hadoop Name=Spark --region my-region --instance-groups InstanceGroupType=MASTER,InstanceCount=1,InstanceType=m3.xlarge InstanceGroupType=CORE,InstanceCount=3,InstanceType=m3.xlarge  --tags edba=true
-  ```
-5. Update [job configurations](resources/edba_config_mysql.sql) maintained in state management store with the S3 bucket name you created in step#1 and connect to the mysql database instance through your preferred SQL client to execute sql statements inside resources/edba_config_mysql.sql
-6. Create a two node dc1.large [Redshift cluster](http://docs.aws.amazon.com/redshift/latest/mgmt/managing-clusters-console.html#create-cluster)
-7. Connect to the cluster through your preferred SQL client and execute statements inside resources/edba_redshift.sql file
-8. Update Update [spark job properties](src/main/resources/spark-job.conf) with Redshift cluster endpoint and S3 temporary path
-9. Build the jar by executing maven shade package. You need to execute this command from the directory where the pom.xml is located
+2. Build the Java jar that will be executed by the Input Validation / Conversation Layer Lambda function.
+
+Use the maven Shade package, to create an all inclusive package dependency jar.
+ 
+You need to execute this command from the directory where the pom.xml is located
 
   ```
   mvn package
   ```
-10. copy the final jar to s3 location you configured in step#3
+  
+Note that this operation will include all eventdrivenbatchanalytics project resources, however at this point they are not updated with all of the configuration that will be needed for layers further down in the data processing architecture!  The jar file that is packaged should be named as follows:
+
+```
+aws-blog-event-driven-batch-analytics $ ls -l target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar 
+-rw-r--r--  1 tchadwick  staff  9649309 Nov 21 16:11 target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar
+```
+
+10. Copy this first version "eventdrivenbatchanalytics" jar to the code directory of the <<S3_EDBA_ACCT_UNIQ_BCKT>>: 
 
   ```
-  aws s3 cp ./eventdrivenbatchanalytics.jar s3://<<S3_EDBA_BUCKET>>/code/
+  aws s3 cp target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar s3://<<S3_EDBA_ACCT_UNIQ_BCKT>>/code/
   ```
-11. Create Validation/Conversion Layer Lambda function
+
+11. Create the Input Validation / Conversion Layer Lambda function
 
   ```
   aws lambda create-function --function-name validateAndNormalizeInputData --zip-file fileb:///<<MyPath>>/eventdrivenbatchanalytics.jar --handler com.amazonaws.bigdatablog.edba.LambdaContainer::validateAndNormalizeInputData --role arn:aws:iam::<<myAccountNumber>>:role/<<myLambdaRole>> --runtime java8 --timeout 120
