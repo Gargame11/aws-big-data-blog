@@ -80,12 +80,7 @@
 		<version>${spark.redshift.connector.version}</version>
 		<scope>provided</scope>
 	</dependency>
-	<dependency>
-		<groupId>com.amazon</groupId>
-		<artifactId>redshift</artifactId>
-		<version>${amazon.redshift.driver.version}</version>
-		<scope>provided</scope>
-	</dependency>
+	
 	<dependency>
 		<groupId>com.amazonaws</groupId>
 		<artifactId>aws-java-sdk-sts</artifactId>
@@ -114,7 +109,16 @@
   			<groupId>org.apache.maven.plugins</groupId>
   			<artifactId>maven-shade-plugin</artifactId>
   			<version>${maven.shade.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
   		</plugin>
+
   	</plugins>
   </build>
 
