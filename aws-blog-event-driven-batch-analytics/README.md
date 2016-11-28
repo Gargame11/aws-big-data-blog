@@ -49,7 +49,7 @@ Let's begin by establishing a successful first Input Validation / Conversion lay
 1. Create S3 bucket. This is the bucket where you would maintain data and configurations for testing the sample implementation provided here
 
  ```
-  aws s3 mb <<S3_EDBA_ACCT_UNIQ_BCKT>>
+  aws s3 mb <<S3_EDBA_ACCT_UNQ_BCKT>>
  ```
 
 2. Build the Java jar that will be executed by the Input Validation / Conversation Layer Lambda function.
@@ -66,21 +66,42 @@ Note that this operation will include all eventdrivenbatchanalytics project reso
 
 ```
 aws-blog-event-driven-batch-analytics $ ls -l target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar 
--rw-r--r--  1 tchadwick  staff  9649309 Nov 21 16:11 target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar
+-rw-r--r--  1 engineer  staff  9649309 Nov 21 16:11 target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar
 ```
 
-10. Copy this first version "eventdrivenbatchanalytics" jar to the code directory of the <<S3_EDBA_ACCT_UNIQ_BCKT>>: 
+10. Copy this first version "eventdrivenbatchanalytics" jar to the code directory of the <<S3_EDBA_ACCT_UNQ_BCKT>>: 
 
   ```
-  aws s3 cp target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar s3://<<S3_EDBA_ACCT_UNIQ_BCKT>>/code/
+  aws s3 cp target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar s3://<<S3_EDBA_ACCT_UNQ_BCKT>>/code/
   ```
 
-11. Create the Input Validation / Conversion Layer Lambda function
+10.  Create a role "edbaLambdaRole" with AWSLambdaVPCAccessExecution, AWSLambdaRole, ElasticMapReduceForEC2Role,S3 and CloudWatch access policies.
+
+11. Create the Input Validation / Conversion Layer Lambda function.  
 
   ```
-  aws lambda create-function --function-name validateAndNormalizeInputData --zip-file fileb:///<<MyPath>>/eventdrivenbatchanalytics.jar --handler com.amazonaws.bigdatablog.edba.LambdaContainer::validateAndNormalizeInputData --role arn:aws:iam::<<myAccountNumber>>:role/<<myLambdaRole>> --runtime java8 --timeout 120
+  aws lambda create-function --function-name <<lambdaVldtAndCnvrtAcctAndRegionUnq>> --zip-file fileb://./target/eventdrivenbatchanalytics-0.0.1-SNAPSHOT.jar --handler com.amazonaws.bigdatablog.edba.LambdaContainer::validateAndNormalizeInputData --role arn:aws:iam::<<EDBA_ACCT>>:role/<<edbaLambdaRole>> --runtime java8 --timeout 120
   ```
-12. Provide S3 permissions to invoke the Validation Layer lambda function
+
+Test the Input by putting a test file into the source-identical spot.
+
+12.  Create a data/source-identical directory (key hierarchy) in the <<S3_EDBA_ACCT_UNQ_BCKT>>
+
+```
+aws s3api put-object --bucket <<S3_EDBA_ACCT_UNQ_BCKT>> --key data/source-identical/IL-1011.tdf --body resources/sampledata/IL-1011.tdf
+```
+
+If the Lambda trigger rules are set correctly, within 30 seconds a file should appear at <<s3_EDBA_ACCT_UNQ_BCKT>>/validated because of line 75 in the LambdaContainer.java file:
+
+```
+s3Client.putObject(record.getS3().getBucket().getName(),"validated/"+eventFileName+".csv",readableDataStream,new ObjectMetadata());
+```
+
+
+
+
+
+12. Provide S3 permissions to invoke the Validation Layer Lambda function
 
   ```
   aws lambda add-permission --function-name auditValidatedFile --statement-id 2222 --action "lambda:InvokeFunction" --principal s3.amazonaws.com --source-arn arn:aws:s3:::event-driven-batch-analytics --source-account <<MyAccount>>
