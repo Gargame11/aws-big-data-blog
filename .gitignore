@@ -3,6 +3,7 @@
 *.DS_Store
 target
 *.class
+*.classpath
 testfiles/*
 
 # Mobile Tools for Java (J2ME)
